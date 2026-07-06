@@ -1,15 +1,12 @@
 # ===============================================================================
-# 功能：JitPack 构建配置。
+# 功能：JitPack 构建配置（单模块纯 Java 库）。
 # 说明：
-#   1. jdk openjdk21——:stringfog / 插件均用 Java 21 source/target compatibility，
-#      JDK 17 无法编译 --release 21，必须 21。
-#   2. before_install：JitPack 环境默认缺 build-tools;36.0.0，AGP 无法自动下载，
-#      先用 sdkmanager 显式装齐 platforms;android-36 + build-tools;36.0.0（自动定位 sdkmanager）。
-#   3. install：把运行时 AAR 与插件 JAR 发布到 mavenLocal，JitPack 据此对外提供依赖。
+#   1. 纯 java-library，不依赖 Android SDK——JitPack 容器无 dl.google.com 网络，
+#      Android AAR（compileSdk 36 / build-tools 36）在此不可构建；纯 JAR 只需 JDK，稳过。
+#   2. jdk openjdk17：JitPack 最稳 JDK；StringFogRuntime 仅用 Base64，17 足够。
+#   3. install：发布唯一 JAR 到 mavenLocal，JitPack 据此对外提供 com.github.Pangu-Immortal:StringFogPro:<tag>。
 # ===============================================================================
 jdk:
-  - openjdk21
-before_install:
-  - "SDKM=$(find $ANDROID_HOME -name sdkmanager -type f 2>/dev/null | head -1); echo \"sdkmanager=$SDKM ANDROID_HOME=$ANDROID_HOME\"; yes | \"$SDKM\" --licenses >/dev/null 2>&1 || true; \"$SDKM\" 'platforms;android-36' 'build-tools;36.0.0'"
+  - openjdk17
 install:
-  - ./gradlew :stringfog:publishToMavenLocal :stringfog-gradle-plugin:publishToMavenLocal --no-daemon --stacktrace
+  - ./gradlew publishToMavenLocal --no-daemon --stacktrace
