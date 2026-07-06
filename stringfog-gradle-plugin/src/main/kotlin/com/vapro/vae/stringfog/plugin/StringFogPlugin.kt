@@ -22,7 +22,8 @@ import org.gradle.api.Project
  *   3. release-only——仅 release 变体加密，debug 不插桩，便于开发期调试。
  *   4. kill-switch——DSL enabled=false 或 -Pva.stringfog.enabled=false 关闭。
  *   5. PROJECT 作用域——仅加密本模块源码，不加密依赖（避免二次加密 / 加密 AndroidX）。
- *   6. COPY_FRAMES——插桩栈语义中性（单参）/ 已在 MethodVisitor 补偿栈深（三参），复制原帧即可。
+ *   6. COPY_FRAMES——插桩净栈中性（各形态由 MethodVisitor 补偿栈深），复制原帧即可。
+ *   7. 配置校验——注册前校验 minLength/algorithm/include∩exclude 冲突/aes 默认密钥，早失败/早告警。
  * ===============================================================================
  */
 class StringFogPlugin : Plugin<Project> {
@@ -34,6 +35,10 @@ class StringFogPlugin : Plugin<Project> {
         ext.algorithm.convention(FogConfigResolver.DEFAULT_ALGORITHM)
         ext.key.convention(FogConfigResolver.DEFAULT_KEY_SENTINEL)
         ext.minLength.convention(1)
+        ext.bytesMode.convention(false)
+        ext.randomKeyPerString.convention(false)
+        ext.randomKeyLength.convention(16)
+        ext.mappingEnabled.convention(false)
 
         // 全局命令行 kill-switch（优先级最高，非法值按默认启用处理）
         val cliEnabled = project.findProperty("va.stringfog.enabled")
@@ -46,14 +51,14 @@ class StringFogPlugin : Plugin<Project> {
         project.plugins.withId("com.android.application") {
             val components = project.extensions
                 .getByType(ApplicationAndroidComponentsExtension::class.java)
-            register(components, ext, cliEnabled)
+            register(project, components, ext, cliEnabled)
         }
 
         // library 模块：注册 release 变体加密
         project.plugins.withId("com.android.library") {
             val components = project.extensions
                 .getByType(LibraryAndroidComponentsExtension::class.java)
-            register(components, ext, cliEnabled)
+            register(project, components, ext, cliEnabled)
         }
     }
 
@@ -63,25 +68,41 @@ class StringFogPlugin : Plugin<Project> {
      *   保证配置缓存/增量构建正确。
      */
     private fun register(
+        project: Project,
         components: AndroidComponentsExtension<*, *, *>,
         ext: StringFogExtension,
         cliEnabled: Boolean
     ) {
         components.onVariants(components.selector().withBuildType("release")) { variant ->
-            registerStringFog(variant, ext, cliEnabled)
+            registerStringFog(project, variant, ext, cliEnabled)
         }
     }
 
     /** 对单个 release 变体注册插桩工厂 + 帧模式。 */
     private fun registerStringFog(
+        project: Project,
         variant: Variant,
         ext: StringFogExtension,
         cliEnabled: Boolean
     ) {
         // DSL 开关 && CLI 开关 —— 任一关闭则不插桩
         if (!cliEnabled || !ext.enabled.get()) {
+            project.logger.lifecycle("[StringFog] 变体 ${variant.name} 未启用加密（enabled 或 -Pva.stringfog.enabled 关闭）")
             return
         }
+
+        // 配置健壮性校验（硬错误抛出、软冲突告警）
+        validateConfig(project, ext)
+
+        // 映射文件路径（mappingEnabled 时输出到 build/outputs/stringfog/，否则空串=不输出）
+        val mappingPath = if (ext.mappingEnabled.get()) {
+            project.layout.buildDirectory
+                .file("outputs/stringfog/stringfog-mapping-${variant.name}.txt")
+                .get().asFile.absolutePath
+        } else {
+            ""
+        }
+
         variant.instrumentation.transformClassesWith(
             StringFogFactory::class.java,
             InstrumentationScope.PROJECT
@@ -92,8 +113,57 @@ class StringFogPlugin : Plugin<Project> {
             params.fogPackages.set(ext.fogPackages)
             params.excludePackages.set(ext.excludePackages)
             params.minLength.set(ext.minLength)
+            params.bytesMode.set(ext.bytesMode)
+            params.randomKeyPerString.set(ext.randomKeyPerString)
+            params.randomKeyLength.set(ext.randomKeyLength)
+            params.mappingFilePath.set(mappingPath)
         }
-        // COPY_FRAMES：单参栈中性、三参已补偿栈深，复制原帧即可，规避 COMPUTE_FRAMES 的类型解析开销
+        // COPY_FRAMES：各插桩形态净栈中性、已由 MethodVisitor 补偿栈深，复制原帧即可，
+        // 规避 COMPUTE_FRAMES 的类型解析开销
         variant.instrumentation.setAsmFramesComputationMode(FramesComputationMode.COPY_FRAMES)
+
+        project.logger.lifecycle(
+            "[StringFog] 变体 ${variant.name} 已启用：algorithm=${ext.algorithm.get()}, " +
+                "bytesMode=${ext.bytesMode.get()}, randomKeyPerString=${ext.randomKeyPerString.get()}, " +
+                "minLength=${ext.minLength.get()}" +
+                if (mappingPath.isNotEmpty()) ", mapping=$mappingPath" else ""
+        )
+    }
+
+    /**
+     * 配置健壮性校验。
+     * 硬错误（抛出，早失败）：minLength 为负、algorithm 空白、randomKeyLength 非正。
+     * 软冲突（告警，不阻塞）：fogPackages ∩ excludePackages 重叠（exclude 优先）、
+     *   aes/自定义算法未设 key（走内置默认密钥，安全性弱，仅演示用）。
+     */
+    private fun validateConfig(project: Project, ext: StringFogExtension) {
+        val minLength = ext.minLength.get()
+        require(minLength >= 0) { "[StringFog] minLength 不得为负，当前=$minLength" }
+
+        val algorithm = ext.algorithm.get()
+        require(algorithm.isNotBlank()) { "[StringFog] algorithm 不得为空白" }
+
+        val randomKeyLength = ext.randomKeyLength.get()
+        require(randomKeyLength > 0) { "[StringFog] randomKeyLength 必须为正，当前=$randomKeyLength" }
+
+        // include ∩ exclude 重叠检测（exclude 优先，仅告警提示配置冗余/意图不清）
+        val fog = ext.fogPackages.get().toSet()
+        val exclude = ext.excludePackages.get().toSet()
+        val overlap = fog.intersect(exclude)
+        if (overlap.isNotEmpty()) {
+            project.logger.warn(
+                "[StringFog] fogPackages 与 excludePackages 存在重叠前缀 $overlap，" +
+                    "excludePackages 优先（这些包将不被加密）；请确认是否符合预期"
+            )
+        }
+
+        // aes/自定义算法未显式设 key → 走内置默认密钥（非机密，release 前建议设 key）
+        val keySet = ext.key.get() != FogConfigResolver.DEFAULT_KEY_SENTINEL && ext.key.get().isNotEmpty()
+        if (algorithm != "xor" && !keySet && !ext.randomKeyPerString.get()) {
+            project.logger.warn(
+                "[StringFog] algorithm=$algorithm 未设置 key，将使用内置默认密钥（仅便于开箱演示，" +
+                    "安全性弱）；release 前建议 stringfog { key.set(\"...\") } 或开启 randomKeyPerString"
+            )
+        }
     }
 }

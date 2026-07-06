@@ -37,11 +37,7 @@ public final class XorFog implements IStringFog {
         return xor(data, key);
     }
 
-    /** 空串不加密，其余一律加密（最小串长阈值由插件层叠加）。 */
-    @Override
-    public boolean shouldFog(String value) {
-        return value != null && !value.isEmpty();
-    }
+    // shouldFog 采用 IStringFog 默认实现（过滤 null/空串）；最小串长阈值由插件层叠加，无需覆写。
 
     /**
      * 循环 XOR 核心：out[i] = data[i] ^ key[i % key.length]。

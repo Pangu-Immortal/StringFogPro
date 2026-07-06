@@ -7,11 +7,12 @@ import org.objectweb.asm.Opcodes
 /**
  * ===============================================================================
  * 功能：StringFog 核心类访问器（纯 ASM，不依赖 AGP，可独立单元测试）。
- * 函数简介：拦截每个方法的 visitMethod，包装出 StringFogMethodVisitor，对方法体内
+ * 函数简介：在 visit 捕获类名，在 visitMethod 包装出 StringFogMethodVisitor，对方法体内
  *   LDC 字符串字面量做加密替换。类级过滤（包名 include/exclude、排除运行时自身）
  *   由上层 AGP 工厂 isInstrumentable 负责，本类只专注字节码改写，便于脱离 AGP 复用。
  *
  * 设计要点：ASM9 API；下游 visitMethod 返回 null（抽象/无方法体）时透传，避免 NPE。
+ *   类名/方法名向下传给 MethodVisitor，供映射输出（MappingWriter）定位加密位置。
  * ===============================================================================
  */
 class StringFogClassVisitor(
@@ -19,6 +20,24 @@ class StringFogClassVisitor(
     next: ClassVisitor?,
     private val config: FogConfig
 ) : ClassVisitor(api, next) {
+
+    /** 当前类的全限定名（点分），由 visit 捕获，供映射记录定位；缺省 "?" 防空。 */
+    private var className: String = "?"
+
+    override fun visit(
+        version: Int,
+        access: Int,
+        name: String?,
+        signature: String?,
+        superName: String?,
+        interfaces: Array<out String?>?
+    ) {
+        // 关键逻辑：ASM 内部名以 '/' 分隔，转为人读的点分类名
+        if (name != null) {
+            className = name.replace('/', '.')
+        }
+        super.visit(version, access, name, signature, superName, interfaces)
+    }
 
     override fun visitMethod(
         access: Int,
@@ -29,7 +48,7 @@ class StringFogClassVisitor(
     ): MethodVisitor? {
         // 关键逻辑：下游若返回 null（抽象/native 无方法体）则直接透传，避免 NPE
         val mv = super.visitMethod(access, name, descriptor, signature, exceptions) ?: return null
-        return StringFogMethodVisitor(api, mv, config)
+        return StringFogMethodVisitor(api, mv, config, className, name ?: "?")
     }
 
     companion object {

@@ -21,10 +21,14 @@ import javax.crypto.spec.SecretKeySpec;
  */
 public final class AesFog implements IStringFog {
 
-    /** AES 分组/IV 长度（字节）。 */
+    /** AES 分组/IV 长度（字节），亦即 AES-128 密钥长度。 */
     private static final int BLOCK = 16;
     /** AES 变换名。 */
     private static final String TRANSFORMATION = "AES/CBC/PKCS5Padding";
+    /** 密钥归一化摘要算法（取其输出前 BLOCK 字节为 AES-128 密钥）。 */
+    private static final String KEY_DIGEST = "SHA-256";
+    /** 强随机 IV 源；SecureRandom 线程安全，构建期多线程可并发复用（避免逐次 new 的开销）。 */
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     /**
      * AES 加密：输出「IV(16B) || 密文体」。
@@ -38,7 +42,7 @@ public final class AesFog implements IStringFog {
         try {
             // 关键逻辑：随机 IV，保证同明文多次加密结果不同
             byte[] iv = new byte[BLOCK];
-            new SecureRandom().nextBytes(iv);
+            SECURE_RANDOM.nextBytes(iv);
             Cipher cipher = Cipher.getInstance(TRANSFORMATION);
             cipher.init(Cipher.ENCRYPT_MODE, secretKey(key), new IvParameterSpec(iv));
             byte[] body = cipher.doFinal(data);
@@ -82,18 +86,14 @@ public final class AesFog implements IStringFog {
         }
     }
 
-    /** 空串不加密，其余一律加密。 */
-    @Override
-    public boolean shouldFog(String value) {
-        return value != null && !value.isEmpty();
-    }
+    // shouldFog 采用 IStringFog 默认实现（过滤 null/空串）；最小串长阈值由插件层叠加，无需覆写。
 
     /**
      * 密钥归一化：SHA-256(key) 取前 16 字节构成 AES-128 密钥。
      * <p>关键逻辑：使任意长度用户密钥都能得到合法 128 位密钥，构建期/运行时归一化一致。</p>
      */
     private static SecretKeySpec secretKey(byte[] key) throws Exception {
-        MessageDigest md = MessageDigest.getInstance("SHA-256");
+        MessageDigest md = MessageDigest.getInstance(KEY_DIGEST);
         byte[] digest = md.digest(key == null ? new byte[0] : key);
         byte[] aes128 = new byte[BLOCK];
         System.arraycopy(digest, 0, aes128, 0, BLOCK);

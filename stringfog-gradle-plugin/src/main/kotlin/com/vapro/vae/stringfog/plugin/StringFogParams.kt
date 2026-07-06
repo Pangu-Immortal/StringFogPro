@@ -4,15 +4,16 @@ import com.android.build.api.instrumentation.InstrumentationParameters
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.Optional
 
 /**
  * ===============================================================================
  * 功能：AGP AsmClassVisitorFactory 插桩参数（DSL → 工厂的可缓存输入）。
- * 函数简介：把 stringfog { } DSL 解析后的算法/密钥/包过滤/最小串长以 @Input 形态传给
- *   StringFogFactory；@Input 保证增量构建与配置缓存正确识别参数变化。
+ * 函数简介：把 stringfog { } DSL 解析后的算法/密钥/包过滤/最小串长/bytes 模式/每串密钥/映射路径
+ *   以 @Input 形态传给 StringFogFactory；@Input 保证增量构建与配置缓存正确识别参数变化。
  *
  * 关键约束：InstrumentationParameters 的所有输入须为 Gradle 可序列化 Property/ListProperty，
- *   并标注 @Input，否则配置缓存报错或增量失效。
+ *   并标注 @Input，否则配置缓存报错或增量失效。可空路径用 @Optional。
  * ===============================================================================
  */
 interface StringFogParams : InstrumentationParameters {
@@ -36,4 +37,21 @@ interface StringFogParams : InstrumentationParameters {
     /** 最小加密串长阈值。 */
     @get:Input
     val minLength: Property<Int>
+
+    /** bytes 模式开关（密文以原始 byte[] 发射）。 */
+    @get:Input
+    val bytesMode: Property<Boolean>
+
+    /** 每串随机密钥开关。 */
+    @get:Input
+    val randomKeyPerString: Property<Boolean>
+
+    /** 每串随机密钥长度。 */
+    @get:Input
+    val randomKeyLength: Property<Int>
+
+    /** 映射文件绝对路径（空串=不输出映射）。 */
+    @get:Input
+    @get:Optional
+    val mappingFilePath: Property<String>
 }

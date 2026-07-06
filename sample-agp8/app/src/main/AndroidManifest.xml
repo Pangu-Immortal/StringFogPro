@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  功能：AGP 8.x 适配验证 App 的最小清单。
+  说明：仅声明 application label，无 Activity——本样本只做构建期插桩验证，不需运行时启动。
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application android:label="agp8" />
+
+</manifest>
