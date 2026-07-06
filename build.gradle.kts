@@ -20,7 +20,7 @@ plugins {
 }
 
 group = "com.github.Pangu-Immortal"
-version = "1.0.0"
+version = "1.1.0"
 
 java {
     // 纯 Java 17 目标：JitPack openjdk17 即可编译；产物 JAR 被 Java 21 主工程直接消费。
@@ -37,7 +37,7 @@ publishing {
             // JitPack 单模块坐标：group=com.github.<user>，artifactId=<repo>，version=<tag>。
             groupId = "com.github.Pangu-Immortal"
             artifactId = "StringFogPro"
-            version = "1.0.0"
+            version = "1.1.0"
         }
     }
 }
