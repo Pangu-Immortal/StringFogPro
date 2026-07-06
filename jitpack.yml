@@ -1,0 +1,11 @@
+# ===============================================================================
+# 功能：JitPack 构建配置。
+# 说明：
+#   1. jdk openjdk21——:stringfog / 插件均用 Java 21 source/target compatibility，
+#      JDK 17 无法编译 --release 21，必须 21。
+#   2. install 阶段把运行时 AAR 与插件 JAR 发布到 mavenLocal，JitPack 据此对外提供依赖。
+# ===============================================================================
+jdk:
+  - openjdk21
+install:
+  - ./gradlew :stringfog:publishToMavenLocal :stringfog-gradle-plugin:publishToMavenLocal --no-daemon --stacktrace
