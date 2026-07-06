@@ -1,12 +1,16 @@
 # ===============================================================================
-# 功能：JitPack 构建配置（单模块纯 Java 库）。
+# 功能：JitPack 构建配置（多模块纯 JVM：运行时库 + Gradle 插件）。
 # 说明：
-#   1. 纯 java-library，不依赖 Android SDK——JitPack 容器无 dl.google.com 网络，
-#      Android AAR（compileSdk 36 / build-tools 36）在此不可构建；纯 JAR 只需 JDK，稳过。
-#   2. jdk openjdk17：JitPack 最稳 JDK；StringFogRuntime 仅用 Base64，17 足够。
-#   3. install：发布唯一 JAR 到 mavenLocal，JitPack 据此对外提供 com.github.Pangu-Immortal:StringFogPro:<tag>。
+#   1. 两个模块均为纯 JVM（:stringfog 用 java-library；:stringfog-gradle-plugin 用 kotlin-dsl），
+#      仅依赖 JDK 与 Maven 上的 gradle-api/asm（google()/mavenCentral()），不下载 Android SDK，
+#      JitPack 容器稳过（Android sample 是独立构建，不在本仓 settings 内，JitPack 永不触碰）。
+#   2. jdk openjdk17：JitPack 最稳 JDK；两模块 sourceCompatibility 均 ≤ 17。
+#   3. install：把两个模块发布到 mavenLocal，JitPack 据此对外提供：
+#        com.github.Pangu-Immortal.StringFogPro:stringfog:<tag>
+#        com.github.Pangu-Immortal.StringFogPro:stringfog-gradle-plugin:<tag>
+#      -x test 跳过测试（测试仅本地/CI 验证，不阻塞发布），加速并规避容器测试环境差异。
 # ===============================================================================
 jdk:
   - openjdk17
 install:
-  - ./gradlew publishToMavenLocal --no-daemon --stacktrace
+  - ./gradlew publishToMavenLocal -x test --no-daemon --stacktrace

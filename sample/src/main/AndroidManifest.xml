@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ===============================================================================
+  功能：StringFogPro 演示 App 清单。
+  说明：最小清单——仅声明 application，不含 Activity 组件；演示目的是把含明文字符串的
+        Java/Kotlin 类编译进 APK，经 release 插桩后反编译对照，无需可交互界面。
+  ===============================================================================
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:allowBackup="true"
+        android:label="StringFogPro Sample" />
+
+</manifest>
