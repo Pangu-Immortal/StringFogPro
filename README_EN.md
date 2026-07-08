@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:a8c0ff,100:3f2b96&height=150&section=header&text=StringFogPro&fontSize=40&fontColor=ffffff&animation=fadeIn&desc=Build-time%20Java/Kotlin%20string%20encryption%20for%20AGP%208.7%20%26%209.2&descSize=14&descAlignY=58" width="100%"/>
+<img src="assets/header.svg" alt="banner" width="100%"/>
 
 <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=18&pause=1000&color=6C7A96&center=true&vCenter=true&width=680&lines=Encrypt+Java+%26+Kotlin+string+literals+at+build+time;XOR+%2F+AES+%2F+custom+algorithm+%2B+per-string+random+key;Zero-dependency+pure-Java+runtime%2C+24%2F24+tests+passing" alt="typing" />
 
@@ -373,6 +373,6 @@ Open to collaboration · 📮 **yugu88@126.com** · GitHub [@Pangu-Immortal](htt
 
 <br/>
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:3f2b96,100:a8c0ff&height=100&section=footer" width="100%"/>
+<img src="assets/footer.svg" alt="footer" width="100%"/>
 
 </div>
