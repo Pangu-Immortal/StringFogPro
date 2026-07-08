@@ -361,7 +361,7 @@ Licensed under **Apache-2.0** — **commercial use allowed**. See [LICENSE](LICE
 
 ### Star History
 
-<a href="https://star-history.com/#Pangu-Immortal/StringFogPro&Date"><img src="https://api.star-history.com/svg?repos=Pangu-Immortal/StringFogPro&type=Date" width="600"></a>
+<a href="https://star-history.com/#Pangu-Immortal/StringFogPro&Date"><img src="https://img.shields.io/badge/⭐_Star_History-View_Live_Chart-5C6BC0?style=for-the-badge" alt="Star History"/></a>
 
 <br/><br/>
 

@@ -361,7 +361,7 @@ StringFogPro/
 
 ### Star 趋势
 
-<a href="https://star-history.com/#Pangu-Immortal/StringFogPro&Date"><img src="https://api.star-history.com/svg?repos=Pangu-Immortal/StringFogPro&type=Date" width="600"></a>
+<a href="https://star-history.com/#Pangu-Immortal/StringFogPro&Date"><img src="https://img.shields.io/badge/⭐_Star_History-View_Live_Chart-5C6BC0?style=for-the-badge" alt="Star History"/></a>
 
 <br/><br/>
 
