@@ -361,13 +361,13 @@ StringFogPro/
 
 ### Star 趋势
 
-<a href="https://star-history.com/#Pangu-Immortal/StringFogPro&Date"><img src="https://img.shields.io/badge/⭐_Star_History-View_Live_Chart-5C6BC0?style=for-the-badge" alt="Star History"/></a>
+<a href="https://star-history.com/#Pangu-Immortal/StringFogPro&Date"><img src="assets/star-history.svg" alt="Star History" width="640"/></a>
 
 <br/><br/>
 
 **关于作者**
 
-主业大模型算法 / AI / 端侧方向（Agentic · LangGraph · A2A · MCP · ADK · GraphRAG · 端侧离线多模态 · 车载 · 世界模型）；ROM / 逆向为技术爱好，非副业。
+主业大模型算法 / AI / 端侧方向（Agentic · LangGraph · A2A · MCP · ADK · GraphRAG · 端侧离线多模态 · 车载 · 世界模型）；ROM / 逆向是我长期钻研的技术兴趣。
 
 欢迎交流合作 · 📮 **yugu88@126.com** · GitHub [@Pangu-Immortal](https://github.com/Pangu-Immortal)
 

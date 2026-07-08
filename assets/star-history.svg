@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="300" viewBox="0 0 640 300" font-family="-apple-system,Segoe UI,Roboto,sans-serif">
+<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5C6BC0" stop-opacity="0.22"/><stop offset="1" stop-color="#5C6BC0" stop-opacity="0"/></linearGradient></defs>
+<rect width="640" height="300" fill="#ffffff"/>
+<text x="55" y="24" font-size="15" font-weight="700" fill="#37474F">⭐ Star History · StringFogPro</text>
+<text x="620" y="24" font-size="13" fill="#5C6BC0" font-weight="700" text-anchor="end">0 ★</text>
+<line x1="55" y1="260.0" x2="620" y2="260.0" stroke="#Eceff1" stroke-width="1"/><text x="47" y="264.0" font-size="11" fill="#90A4AE" text-anchor="end">0</text><line x1="55" y1="40.0" x2="620" y2="40.0" stroke="#Eceff1" stroke-width="1"/><text x="47" y="44.0" font-size="11" fill="#90A4AE" text-anchor="end">1</text>
+<path d="M 55.0 260.0 L 620.0 260.0 L 620.0 260.0 L 55.0 260.0 Z" fill="url(#g)"/>
+<path d="M 55.0 260.0 L 620.0 260.0" fill="none" stroke="#5C6BC0" stroke-width="2.4" stroke-linejoin="round"/>
+<text x="55" y="286" font-size="11" fill="#90A4AE">2026-07-06</text><text x="620" y="286" font-size="11" fill="#90A4AE" text-anchor="end">2026-07-08</text><text x="320.0" y="150.0" font-size="13" fill="#B0BEC5" text-anchor="middle">☆ 暂无 star · Be the first to star ⭐</text>
+</svg>
