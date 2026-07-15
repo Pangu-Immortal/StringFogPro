@@ -1,13 +1,10 @@
 package com.vapro.vae.stringfog.plugin.core
 
-import java.util.Base64
 import org.objectweb.asm.MethodVisitor
 import org.objectweb.asm.Opcodes
 import org.objectweb.asm.Type
-import org.objectweb.asm.tree.AbstractInsnNode
 import org.objectweb.asm.tree.InsnList
 import org.objectweb.asm.tree.InsnNode
-import org.objectweb.asm.tree.IntInsnNode
 import org.objectweb.asm.tree.InvokeDynamicInsnNode
 import org.objectweb.asm.tree.LdcInsnNode
 import org.objectweb.asm.tree.MethodInsnNode
@@ -56,8 +53,17 @@ class StringFogMethodVisitor(
     exceptions: Array<String?>?,
     /** 下游方法访问器（通常为 ClassWriter 的 MethodWriter），visitEnd 里 accept 回放改写后的方法体。 */
     private val nextVisitor: MethodVisitor?,
-    private val config: FogConfig,
-    private val className: String
+    /** 加密指令发射器（LDC 加密 / 拼接去糖块 / 字段 ConstantValue 注入共用的单一真相源）。 */
+    private val emitter: FogInsnEmitter,
+    private val className: String,
+    /**
+     * 需注入到方法体最前面的预置指令（仅 <clinit> 使用）：字段 ConstantValue 被剥离后，
+     * 在此处集中放置各常量字段的「密文 + decrypt + PUTSTATIC」序列，使字段在类初始化最先被赋值。
+     * 关键：本器在两类改写「之后」再插入这段，故其内已加密的密文 LDC 不会被 transformLdcConstants
+     *   二次加密（密文经二次加解密仍逐层还原，但仍以「后插」杜绝多余层，语义与体积双优）；
+     *   非 <clinit> 方法传 null。
+     */
+    private val prependInsns: InsnList? = null
 ) : MethodNode(api, access, name, descriptor, signature, exceptions) {
 
     /** 当前方法名（供映射记录定位）；缺省 "?" 防空。 */
@@ -66,11 +72,14 @@ class StringFogMethodVisitor(
     /**
      * 方法体收集完毕：先改写指令表（LDC 加密 + invokedynamic 去糖），再 accept 回放至下游。
      * 关键逻辑：改写异常时仍保证 accept 回放（try/finally），避免半改写产出损坏类；下游为空则不回放。
+     *   字段 ConstantValue 注入序列在两类改写之后插到方法体最前（见 prependInsns），插入为直线、
+     *   净栈 0、不新增局部，原有帧/局部表不受影响（maxStack 由 ClassWriter 重算）。
      */
     override fun visitEnd() {
         try {
             transformLdcConstants()
             transformStringConcatIndy()
+            prependInsns?.let { if (it.size() > 0) instructions.insert(it) }
         } finally {
             nextVisitor?.let { accept(it) }
         }
@@ -84,7 +93,7 @@ class StringFogMethodVisitor(
         for (insn in instructions.toArray()) {
             if (insn is LdcInsnNode && insn.cst is String) {
                 val value = insn.cst as String
-                val encrypted = buildEncryptInsns(value) ?: continue
+                val encrypted = emitter.buildEncryptInsns(value, className, methodName) ?: continue
                 instructions.insertBefore(insn, encrypted)
                 instructions.remove(insn)
             }
@@ -156,7 +165,7 @@ class StringFogMethodVisitor(
         if (argCursor != argTypes.size) return null
 
         // ---- 2. 门槛判定：无可加密字面量块则不去糖 ----
-        val hasEncryptable = chunks.any { it is ConcatChunk.Literal && qualifiesForFog(it.text) }
+        val hasEncryptable = chunks.any { it is ConcatChunk.Literal && emitter.qualifiesForFog(it.text) }
         if (!hasEncryptable) return null
 
         // ---- 3. 为动态参数分配新局部槽并逆序 STORE ----
@@ -182,7 +191,7 @@ class StringFogMethodVisitor(
         for (chunk in chunks) {
             when (chunk) {
                 is ConcatChunk.Literal -> {
-                    val enc = buildEncryptInsns(chunk.text)
+                    val enc = emitter.buildEncryptInsns(chunk.text, className, methodName)
                     if (enc != null) {
                         out.add(enc) // 栈顶留 String（decrypt 返回值）
                     } else {
@@ -235,107 +244,6 @@ class StringFogMethodVisitor(
         out.add(MethodInsnNode(Opcodes.INVOKEVIRTUAL, STRING_BUILDER, "append", desc, false))
     }
 
-    // ============================== 加密序列构造（LDC 与拼接块共用的单一真相源） ==============================
-
-    /**
-     * 把一个明文字符串构造为「留 1 个 String 在栈顶」的加密指令序列（净栈 +1，与原 LDC 一致）。
-     * 返回 null 表示该串不加密（空 / 短于 minLength / 超 maxUtf8Bytes / 算法判否）——调用方回退为原文 LDC。
-     *
-     * 四种发射形态（传输编码 × 密钥形态，与 StringFogRuntime 四条 decrypt 入口一一对应）：
-     *   Base64 legacy：LDC 密文 → decrypt(String)
-     *   Base64 三参 ：LDC 密文,密钥,算法 → decrypt(String,String,String)
-     *   bytes  legacy：<build byte[]> → decrypt(byte[])
-     *   bytes  三参 ：<build byte[]>,LDC 密钥,算法 → decrypt(byte[],String,String)
-     */
-    private fun buildEncryptInsns(value: String): InsnList? {
-        val utf8 = value.toByteArray(Charsets.UTF_8)
-        if (!shouldFog(value, utf8.size)) return null
-
-        // 逐串确定密钥：每串密钥模式下由生成器产出该串专属密钥；否则用固定密钥
-        val keyLiteral: String?
-        val keyBytes: ByteArray
-        val keyGen = config.keyGenerator
-        if (keyGen != null) {
-            val generated = keyGen.generateKey(value)
-            keyLiteral = generated
-            keyBytes = generated.toByteArray(Charsets.UTF_8)
-        } else {
-            keyLiteral = config.keyLiteral
-            keyBytes = config.keyBytes
-        }
-
-        // 构建期加密：明文 UTF-8 → IStringFog.encrypt → 密文字节；Base64 仅用于映射人读与 Base64 形态发射
-        val cipherBytes = config.fog.encrypt(utf8, keyBytes)
-        val cipherBase64 = Base64.getEncoder().encodeToString(cipherBytes)
-        config.mappingWriter?.record(className, methodName, value, cipherBase64, config.algorithmId)
-
-        val out = InsnList()
-        if (config.bytesMode) {
-            emitByteArrayLiteral(out, cipherBytes)
-            if (config.legacy) {
-                invokeDecrypt(out, DESC_1ARG_BYTES)
-            } else {
-                out.add(LdcInsnNode(requireNotNull(keyLiteral) { "三参路径 keyLiteral 不应为空" }))
-                out.add(LdcInsnNode(config.algorithmId))
-                invokeDecrypt(out, DESC_3ARG_BYTES)
-            }
-        } else {
-            out.add(LdcInsnNode(cipherBase64))
-            if (config.legacy) {
-                invokeDecrypt(out, DESC_1ARG_STRING)
-            } else {
-                out.add(LdcInsnNode(requireNotNull(keyLiteral) { "三参路径 keyLiteral 不应为空" }))
-                out.add(LdcInsnNode(config.algorithmId))
-                invokeDecrypt(out, DESC_3ARG_STRING)
-            }
-        }
-        return out
-    }
-
-    /** 发射 INVOKESTATIC StringFogRuntime.decrypt(<desc>)。 */
-    private fun invokeDecrypt(out: InsnList, descriptor: String) {
-        out.add(MethodInsnNode(Opcodes.INVOKESTATIC, RUNTIME_OWNER, METHOD_DECRYPT, descriptor, false))
-    }
-
-    /**
-     * 以字节码构造一个 byte[] 字面量并留在栈顶（bytes 模式）。
-     * 关键逻辑：pushLen → NEWARRAY byte → 逐元素 (DUP, pushIndex, BIPUSH byte, BASTORE)；
-     *   密文字节为 -128..127（Byte），BIPUSH 直取，BASTORE 截断为 byte，位一致。
-     */
-    private fun emitByteArrayLiteral(out: InsnList, bytes: ByteArray) {
-        pushInt(out, bytes.size)
-        out.add(IntInsnNode(Opcodes.NEWARRAY, Opcodes.T_BYTE))
-        for (i in bytes.indices) {
-            out.add(InsnNode(Opcodes.DUP))
-            pushInt(out, i)
-            out.add(IntInsnNode(Opcodes.BIPUSH, bytes[i].toInt()))
-            out.add(InsnNode(Opcodes.BASTORE))
-        }
-    }
-
-    /** 压入一个 int 常量，按值域选最短指令（ICONST/BIPUSH/SIPUSH/LDC）。 */
-    private fun pushInt(out: InsnList, v: Int) {
-        when {
-            v == -1 -> out.add(InsnNode(Opcodes.ICONST_M1))
-            v in 0..5 -> out.add(InsnNode(Opcodes.ICONST_0 + v))
-            v in Byte.MIN_VALUE.toInt()..Byte.MAX_VALUE.toInt() -> out.add(IntInsnNode(Opcodes.BIPUSH, v))
-            v in Short.MIN_VALUE.toInt()..Short.MAX_VALUE.toInt() -> out.add(IntInsnNode(Opcodes.SIPUSH, v))
-            else -> out.add(LdcInsnNode(v))
-        }
-    }
-
-    /** 达到加密门槛（非空 + ≥minLength + 不超 maxUtf8Bytes + 算法判定）——供拼接块门槛预判复用。 */
-    private fun qualifiesForFog(value: String): Boolean =
-        shouldFog(value, value.toByteArray(Charsets.UTF_8).size)
-
-    /** 是否加密：非空 + 满足 minLength（字符数）+ 不超 maxUtf8Bytes（防越限）+ 算法 shouldFog 判定。 */
-    private fun shouldFog(value: String, utf8Size: Int): Boolean {
-        if (value.isEmpty()) return false
-        if (value.length < config.minLength) return false
-        if (utf8Size > config.maxUtf8Bytes) return false
-        return config.fog.shouldFog(value)
-    }
-
     /** 拼接块类型：字面量块（合并连续字面量字符 + 折叠常量）或动态参数块（引用 indy 描述符第 index 个参数）。 */
     private sealed class ConcatChunk {
         class Literal(val text: String) : ConcatChunk()
@@ -343,12 +251,6 @@ class StringFogMethodVisitor(
     }
 
     companion object {
-        /** 运行时解密器内部名（INVOKESTATIC 目标 owner）。 */
-        private const val RUNTIME_OWNER = "com/vapro/vae/stringfog/StringFogRuntime"
-
-        /** 解密方法名。 */
-        private const val METHOD_DECRYPT = "decrypt"
-
         /** StringConcatFactory 内部名（invokedynamic bootstrap owner）。 */
         private const val STRING_CONCAT_FACTORY = "java/lang/invoke/StringConcatFactory"
 
@@ -365,19 +267,6 @@ class StringFogMethodVisitor(
         /** recipe 标记位：动态参数 / bootstrap 常量（其余字符为字面量文本）。 */
         private const val TAG_ARG = ''
         private const val TAG_CONST = ''
-
-        /** decrypt(String)String —— Base64 legacy 单参。 */
-        private const val DESC_1ARG_STRING = "(Ljava/lang/String;)Ljava/lang/String;"
-
-        /** decrypt(String,String,String)String —— Base64 三参。 */
-        private const val DESC_3ARG_STRING =
-            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;"
-
-        /** decrypt(byte[])String —— bytes legacy 单参。 */
-        private const val DESC_1ARG_BYTES = "([B)Ljava/lang/String;"
-
-        /** decrypt(byte[],String,String)String —— bytes 三参。 */
-        private const val DESC_3ARG_BYTES = "([BLjava/lang/String;Ljava/lang/String;)Ljava/lang/String;"
 
         /** String 类型（append(String) 场景复用）。 */
         private val TYPE_STRING: Type = Type.getObjectType(STRING_TYPE)

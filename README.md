@@ -11,7 +11,7 @@
 <br/><br/>
 
 ![License](https://img.shields.io/badge/License-Apache%202.0-607D8B?style=flat-square)
-![Release](https://img.shields.io/badge/Release-v2.2.0-5C6BC0?style=flat-square)
+![Release](https://img.shields.io/badge/Release-v2.3.0-5C6BC0?style=flat-square)
 ![AGP](https://img.shields.io/badge/AGP-8.7%20%7C%209.2-26A69A?style=flat-square)
 ![Gradle](https://img.shields.io/badge/Gradle-8.13%20%7C%209.6-78909C?style=flat-square)
 ![JDK](https://img.shields.io/badge/JDK-17%2B-8B7EC8?style=flat-square)
@@ -52,6 +52,7 @@
 | --- | --- |
 | **Java / Kotlin 双支持** | 工作在 ASM 字节码层，与源语言无关，两者被同样加密（附真实反编译证据） |
 | **拼接字面量加密（v2.2.0）** | 支持 `invokedynamic makeConcatWithConstants`（Java 9+/Kotlin 的 `"文本"+变量`/字符串模板）——去糖为等价 `StringBuilder` 链，加密 recipe/bootstrap 常量里的明文（旧版仅 LDC 够不着） |
+| **字段 ConstantValue 加密（v2.3.0）** | 根治 `const val`（Kotlin）/ `static final String`（Java）盲点——剥离字段明文 `ConstantValue` 属性，在 `<clinit>` 注入「密文+`decrypt`+`PUTSTATIC`」运行期还原，使明文不再以字段常量形态残留于 `.class`/AAR/dex 常量池 |
 | **APK + AAR/JAR 加密** | Application 变体与 Library 变体走同一套 ASM 变换核心 |
 | **三种算法** | 内置 **XOR+Base64（默认）** 与 **AES-128/CBC**，可注册任意自定义 `IStringFog` |
 | **每串随机密钥** | 每个字符串独立随机密钥，相同明文各处密文不同，抗统计/模式分析 |
@@ -324,7 +325,7 @@ StringFogPro/
 
 - **运行时为何是 Java 而非 Kotlin？** 运行时 JAR 会被打进每个消费方 APK，目标是**零依赖极小**。用 Kotlin 会强制引入 `kotlin-stdlib`（约 1.5MB+），破坏零依赖定位。加密在 ASM 字节码层，Kotlin 业务类同样被加密。
 - **密钥并非密码学机密。** 密钥（含每串随机密钥）随字节码嵌入 APK。目标是**抵御 `strings`/grep 明文扫描、抬高逆向成本**，而非提供不可破解的加密。
-- **编译期常量（`const val` / `static final String`）不被加密。** 它们以 `ConstantValue` 属性内联，非方法体 `LDC` 指令；敏感串请用方法返回值或非 const 字段。
+- **编译期常量字段加密（v2.3.0 起）。** `const val`（Kotlin）/ `static final String`（Java）编译后明文以字段的 `ConstantValue` 属性形态落进常量池（非方法体 `LDC`）——v2.3.0 前是覆盖不到的盲点。现对「`static` + `String` 类型 + 带 `ConstantValue` 属性、且达 `minLength` 门槛」的常量字段，剥离其明文 `ConstantValue`（字段变无初值 `static [final]`），并在类 `<clinit>` 注入「密文+`decrypt`+`PUTSTATIC`」运行期还原（`PUTSTATIC` 对 `final static` 字段仅在本类 `<clinit>` 合法，注入位置正满足）；无 `<clinit>` 则合成一个，有则前插既有 `<clinit>`（密文序列在方法体两类改写之后插入，不被二次加密）。取值经字段读取运行期解密，逐字节等于原文。短于 `minLength` 的常量字段保留原 `ConstantValue`（不误伤）。
 - **拼接字面量加密（v2.2.0 起）。** 除 `LDC` String 常量外，Java 9+/Kotlin 的 `invokedynamic makeConcatWithConstants`（`"文本"+变量`、字符串模板）也被处理：去糖为等价 `StringBuilder` 链，把 recipe 字面量片段与 `` bootstrap 常量里 ≥`minLength` 的明文改为运行期 `decrypt`，动态参数按精确类型 `append`，拼接结果逐字节不变。无可加密字面量的拼接（纯变量 / `makeConcat`）原样保留、零改动。此模式下插件对被插桩类请求 `COMPUTE_FRAMES` 重算帧。
 - **超长串跳过。** 超阈值（Base64 45000 / bytes 8000 UTF-8 字节）保持明文，避免常量池 65535 上限，远超真实密钥/URL 长度。
 - **作用域 `PROJECT`。** 仅加密本模块源码，不加密依赖（避免二次加密 / 加密 AndroidX）。
@@ -340,6 +341,12 @@ StringFogPro/
 > v2.1.0 已补齐的原 Roadmap 项：每串随机密钥、bytes 免 Base64、mapping 映射文件、AAR 库端到端反编译证据——均附实现位与测试/反编译证据。
 
 ## 更新日志
+
+### v2.3.0（字段 ConstantValue 加密 · 根治 const val 盲点）
+- **新增字段 `ConstantValue` 加密**：`const val`（Kotlin）/ `static final String`（Java）编译后，明文以字段的 `ConstantValue` 属性形态落进 class 常量池——旧版只改方法体 `LDC`/`invokedynamic`，覆盖不到字段属性，导致明文残留 `.class`/AAR/dex（这正是上轮 `AdxIdentityContext.VIA_PACKAGE` 被迫从 `const val` 改普通 `val` 绕过的盲点）。本版在 `ClassVisitor` 层对达门槛的 `static` + `String` 常量字段**剥离明文 `ConstantValue`**，并在类 `<clinit>` 注入「密文+`decrypt`+`PUTSTATIC`」——无 `<clinit>` 则合成、有则前插既有 `<clinit>`（密文序列在两类改写之后插入，杜绝二次加密）。字段读取运行期解密，**逐字节等于原文**。
+- **发射器抽出**：`LDC` 加密 / 拼接去糖块 / 字段 `<clinit>` 注入三处共用同一 `FogInsnEmitter`（四形态与 `StringFogRuntime` 四条 `decrypt` 入口严格一致）。
+- **invokedynamic 复核结论**：v2.2.0 的拼接去糖**已覆盖** recipe/bootstrap 常量里的明文（含内联进 recipe 的 `const`）——新增 `constInlinedIntoConcatRecipe` 用例复现「ADXWebView 日志形态」并断言 `mark.via.gp` 清零，证实此前「recipe 覆盖不到」为误判；真正盲点仅是字段 `ConstantValue`，本版根治。
+- **测试**：40/40 通过（旧 34 + 新 6 字段常量）；新增用例覆盖 Java 无 `<clinit>`（合成）/ 有 `<clinit>`（前插）、ASM 复刻 Kotlin `object`（`const val`+`INSTANCE`，生产 `xor`+每串密钥配置）、短于 `minLength` 不误伤、多常量字段一并注入、`const` 内联进拼接 recipe 清零——均以「字段 `ConstantValue` 剥离 + `.class` 明文消失 + 反射字段值逐字节等于原文」断言。
 
 ### v2.2.0（invokedynamic 拼接加密）
 - **新增 `makeConcatWithConstants` 加密**：Java 9+/Kotlin 的 `"文本"+变量`/字符串模板编译为 `invokedynamic`，其字面量藏在 recipe 与 bootstrap 常量里（旧版 LDC 路径够不着）。本版把该 `invokedynamic` 去糖为等价 `StringBuilder` 链，加密达门槛字面量、动态参数按精确类型 `append`，**拼接结果逐字节等价**。
