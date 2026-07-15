@@ -64,70 +64,41 @@
 
 ## 快速接入
 
-StringFogPro 通过 JitPack 发布两个坐标：插件 `stringfog-gradle-plugin` 与运行时 `stringfog`。
+StringFogPro 是标准 `java-gradle-plugin`，发布时**自动生成插件 marker**（`com.va.stringfog:com.va.stringfog.gradle.plugin`），
+消费端即可 `plugins { id("com.va.stringfog") version "2.2.0" }` **一行接入**（免 buildscript classpath），并获得 `stringfog { }` 类型安全 DSL。
 
-### 第 1 步：声明 JitPack 仓库
-
-`settings.gradle.kts`：
+### 第 1 步：声明仓库（`settings.gradle.kts`）
 
 ```kotlin
 pluginManagement {
     repositories {
-        maven { url = uri("https://jitpack.io") }
+        mavenLocal()                                 // 本地 publishToMavenLocal 联调时命中 2.2.0（含 marker）
+        maven { url = uri("https://jitpack.io") }    // JitPack 源码分发（见下方「JitPack 说明」）
         google(); mavenCentral(); gradlePluginPortal()
     }
 }
 dependencyResolutionManagement {
     repositories {
+        mavenLocal()
         maven { url = uri("https://jitpack.io") }
         google(); mavenCentral()
     }
 }
 ```
 
-### 第 2 步：引入插件（推荐方式 A，JitPack 最稳）
+### 第 2 步：应用插件（主推 · 一行式 `plugins { id }`）
 
-根 `build.gradle.kts` 用 buildscript classpath：
-
-```kotlin
-buildscript {
-    repositories {
-        maven { url = uri("https://jitpack.io") }
-        google(); mavenCentral()
-    }
-    dependencies {
-        classpath("com.github.Pangu-Immortal.StringFogPro:stringfog-gradle-plugin:v2.2.0")
-    }
-}
-```
-
-> **方式 B（声明式 `plugins {}`）**：JitPack 服务 module 坐标但不服务插件 marker，需在 `pluginManagement` 加 `resolutionStrategy` 映射：
-> ```kotlin
-> pluginManagement {
->     resolutionStrategy {
->         eachPlugin {
->             if (requested.id.id == "com.va.stringfog") {
->                 useModule("com.github.Pangu-Immortal.StringFogPro:stringfog-gradle-plugin:${requested.version}")
->             }
->         }
->     }
-> }
-> ```
-> 之后即可 `plugins { id("com.va.stringfog") version "v2.2.0" }`（已实测该 module 坐标可解析装载）。
-
-### 第 3 步：应用插件 + 引入运行时 + 配置
-
-`app/build.gradle.kts`：
+在要加密的模块 `build.gradle.kts`：
 
 ```kotlin
 plugins {
-    id("com.android.application")
-    // 或用方式 A：apply(plugin = "com.va.stringfog")
+    id("com.android.application")            // 或 com.android.library
+    id("com.va.stringfog") version "2.2.0"   // ← 一行接入；自动提供 stringfog {} DSL
 }
 
 dependencies {
     // 运行时解密器（零依赖纯 Java JAR）
-    implementation("com.github.Pangu-Immortal.StringFogPro:stringfog:v2.2.0")
+    implementation("com.github.Pangu-Immortal.StringFogPro:stringfog:2.2.0")
 }
 
 // 可选配置；不写则零配置走默认 XOR（向后兼容 v1.1.0）
@@ -147,6 +118,38 @@ stringfog {
 **搞定。** 执行 `./gradlew assembleRelease`，release 产物里的字符串即被自动加密；debug 不受影响。
 
 > 全局临时关闭：`./gradlew assembleRelease -Pva.stringfog.enabled=false`
+
+> **`version` 的取值**：`plugins { id }` 里的版本须与已发布的 **marker 版本**一致——
+> 本地 `publishToMavenLocal`（默认 `2.2.0`）→ 用 `version "2.2.0"`；Gradle Plugin Portal（未来）→ 亦为 `2.2.0`。
+
+### JitPack 分发说明（诚实标注）
+
+JitPack 服务 module 坐标（`com.github.Pangu-Immortal.StringFogPro:*`），但**不服务 Gradle 插件 marker**
+（marker 组名是 `com.va.stringfog`）。因此若从 JitPack 取插件，`plugins { id }` 需二选一：
+
+- **仍走一行式**：在 `pluginManagement` 加一次 `resolutionStrategy` 把 id 映射到 module 坐标（用 JitPack 的 `v` 前缀 tag）：
+  ```kotlin
+  pluginManagement {
+      resolutionStrategy {
+          eachPlugin {
+              if (requested.id.id == "com.va.stringfog") {
+                  useModule("com.github.Pangu-Immortal.StringFogPro:stringfog-gradle-plugin:${requested.version}")
+              }
+          }
+      }
+  }
+  // 之后：plugins { id("com.va.stringfog") version "v2.2.0" }
+  ```
+- **fallback · buildscript classpath**（老方式，不再主推）：
+  ```kotlin
+  buildscript {
+      repositories { maven { url = uri("https://jitpack.io") }; google(); mavenCentral() }
+      dependencies { classpath("com.github.Pangu-Immortal.StringFogPro:stringfog-gradle-plugin:v2.2.0") }
+  }
+  // 子模块：apply(plugin = "com.va.stringfog") + configure<...StringFogExtension> { ... }
+  ```
+
+> 一句话：**mavenLocal / Gradle Plugin Portal 下 `plugins { id }` 开箱一行接入；JitPack 下加一次 `resolutionStrategy` 映射即可保持一行式**，classpath 仅作最后 fallback。
 
 ## 配置项参考
 
@@ -181,7 +184,7 @@ stringfog {
 | 配置形态 | Groovy DSL 为主 | 类型化 **Kotlin DSL** + 配置校验 | ✅ |
 | 运行时依赖 | 需引算法库 | **零依赖纯 Java JAR** | ✅ |
 
-> **诚实声明**：与原版的真正差距收敛到「`plugins {}` 免接线声明式解析」——它需把插件 marker 发布到 Gradle Plugin Portal（需外部发布账号，本项目暂无）。JitPack 下用 buildscript classpath 或 `resolutionStrategy` 映射即可（见[快速接入](#快速接入)）。
+> **诚实声明**：插件 marker 已由 `java-gradle-plugin` 自动生成并随 `publishToMavenLocal` 发布，故 **mavenLocal / Gradle Plugin Portal 下 `plugins { id("com.va.stringfog") version "2.2.0" }` 已可一行接入**。唯一未完成项是「发布到官方 Gradle Plugin Portal」（需外部发布账号，本项目暂无）；在此之前，JitPack 分发下用一次 `resolutionStrategy` 映射即可保持一行式，或退回 buildscript classpath（见[快速接入](#快速接入)）。
 >
 > bytes 模式「省体积」诚实说明：本仓 6 条短串样例整包 DEX 差异仅 +8 字节（可忽略），故 bytes 模式**首要价值是抹除 Base64 文本特征 + 免运行时 Base64 解码**，而非对短串省体积。
 
@@ -328,7 +331,8 @@ StringFogPro/
 
 ## Roadmap（诚实标注）
 
-- [ ] **`plugins {}` 免接线声明式（Gradle Plugin Portal marker）** —— 需外部发布账号，本项目暂无；当前走 buildscript classpath 或 `resolutionStrategy` 映射。
+- [x] **插件 marker 自动生成** —— `java-gradle-plugin` 已生成 `com.va.stringfog:com.va.stringfog.gradle.plugin`，`publishToMavenLocal` 一并发布；mavenLocal / 未来 Portal 下 `plugins { id("com.va.stringfog") version "2.2.0" }` 一行接入已实测跑通（DXApp :webkitsdk）。
+- [ ] **发布到官方 Gradle Plugin Portal** —— 需外部发布账号，本项目暂无；在此之前 JitPack 分发用一次 `resolutionStrategy` 映射保持一行式，或退回 buildscript classpath。
 - [ ] **AGP 7.2 ~ 8.6 逐版实测** —— API 层理论兼容，已实测 8.7.3 与 9.2.1 两档。
 - [ ] **JDK 17 下限实测** —— 产物面向 Java 17，本环境以 JDK 21 构建/测试。
 - [ ] **R8/混淆共存实测** —— sample 关闭 R8 聚焦插桩；插桩发生在 R8 前，理论无冲突。
