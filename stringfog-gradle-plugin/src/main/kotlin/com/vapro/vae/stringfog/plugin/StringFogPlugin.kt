@@ -22,7 +22,7 @@ import org.gradle.api.Project
  *   3. release-only——仅 release 变体加密，debug 不插桩，便于开发期调试。
  *   4. kill-switch——DSL enabled=false 或 -Pva.stringfog.enabled=false 关闭。
  *   5. PROJECT 作用域——仅加密本模块源码，不加密依赖（避免二次加密 / 加密 AndroidX）。
- *   6. COPY_FRAMES——插桩净栈中性（各形态由 MethodVisitor 补偿栈深），复制原帧即可。
+ *   6. COMPUTE_FRAMES——invokedynamic 拼接去糖改变指令数并新增局部，帧/maxs 须重算（见 registerStringFog）。
  *   7. 配置校验——注册前校验 minLength/algorithm/include∩exclude 冲突/aes 默认密钥，早失败/早告警。
  * ===============================================================================
  */
@@ -118,9 +118,13 @@ class StringFogPlugin : Plugin<Project> {
             params.randomKeyLength.set(ext.randomKeyLength)
             params.mappingFilePath.set(mappingPath)
         }
-        // COPY_FRAMES：各插桩形态净栈中性、已由 MethodVisitor 补偿栈深，复制原帧即可，
-        // 规避 COMPUTE_FRAMES 的类型解析开销
-        variant.instrumentation.setAsmFramesComputationMode(FramesComputationMode.COPY_FRAMES)
+        // COMPUTE_FRAMES_FOR_INSTRUMENTED_CLASSES：invokedynamic 拼接去糖会改变指令数并新增局部变量，
+        //   原 StackMapTable 与 maxStack/maxLocals 必须重算（COPY_FRAMES 直接复制原帧会致 VerifyError）。
+        //   AGP 对该模式提供类路径感知的 ClassWriter，getCommonSuperClass 走变换类路径解析，帧重算安全。
+        //   仅重算被插桩类（PROJECT 作用域=本模块自有类），开销有界；LDC-only 类一并重算亦逐字节正确。
+        variant.instrumentation.setAsmFramesComputationMode(
+            FramesComputationMode.COMPUTE_FRAMES_FOR_INSTRUMENTED_CLASSES
+        )
 
         project.logger.lifecycle(
             "[StringFog] 变体 ${variant.name} 已启用：algorithm=${ext.algorithm.get()}, " +

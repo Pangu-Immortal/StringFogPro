@@ -93,10 +93,15 @@ class StringFogTransformTest {
         return cw.toByteArray()
     }
 
-    /** 解析出的 config 直接插桩（ClassWriter(0) 真实检验栈深补偿）。 */
+    /**
+     * 解析出的 config 直接插桩。
+     * 关键逻辑：树 API 版访问器不再手工补偿 maxStack（invokedynamic 去糖会改变指令数并新增局部，
+     *   须由 ClassWriter 重算），故用 COMPUTE_MAXS 重算 maxStack/maxLocals。测试类均为直线方法、无分支，
+     *   无 StackMapTable，COMPUTE_MAXS 足矣；生产由 AGP COMPUTE_FRAMES 重算帧（见 StringFogPlugin）。
+     */
     private fun transform(original: ByteArray, config: FogConfig): ByteArray {
         val cr = ClassReader(original)
-        val cw = ClassWriter(0)
+        val cw = ClassWriter(ClassWriter.COMPUTE_MAXS)
         cr.accept(StringFogClassVisitor(StringFogClassVisitor.ASM_API, cw, config), 0)
         return cw.toByteArray()
     }

@@ -25,9 +25,13 @@ dependencies {
     compileOnly("com.android.tools.build:gradle-api:9.2.1")
     // ASM 9.9（AGP 9.2.1 内置版本；ClassVisitor/MethodVisitor/Opcodes）。
     compileOnly("org.ow2.asm:asm:9.9")
+    // ASM 树 API 9.9（MethodNode/InsnList/InvokeDynamicInsnNode）：invokedynamic 拼接去糖需缓冲方法体
+    //   并依据真实 maxLocals 安全分配新局部；同为 AGP 9.2.1 内置版本，compileOnly（运行期由 AGP 提供）。
+    compileOnly("org.ow2.asm:asm-tree:9.9")
 
     // 单元/集成测试：核心 ASM 层脱离 AGP 独立验证（编译类→插桩→加载→往返断言）。
     testImplementation("org.ow2.asm:asm:9.9")
+    testImplementation("org.ow2.asm:asm-tree:9.9")
     testImplementation("org.ow2.asm:asm-util:9.9")
     testImplementation(platform("org.junit:junit-bom:5.10.2"))
     testImplementation("org.junit.jupiter:junit-jupiter")

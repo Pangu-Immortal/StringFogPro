@@ -2,7 +2,7 @@
 
 <img src="assets/header.svg" alt="banner" width="100%"/>
 
-<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=18&pause=1000&color=6C7A96&center=true&vCenter=true&width=680&lines=Encrypt+Java+%26+Kotlin+string+literals+at+build+time;XOR+%2F+AES+%2F+custom+algorithm+%2B+per-string+random+key;Zero-dependency+pure-Java+runtime%2C+24%2F24+tests+passing" alt="typing" />
+<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=18&pause=1000&color=6C7A96&center=true&vCenter=true&width=680&lines=Encrypt+Java+%26+Kotlin+string+literals+at+build+time;XOR+%2F+AES+%2F+custom+algorithm+%2B+per-string+random+key;Zero-dependency+pure-Java+runtime%2C+34%2F34+tests+passing" alt="typing" />
 
 <br/>
 
@@ -11,11 +11,11 @@
 <br/><br/>
 
 ![License](https://img.shields.io/badge/License-Apache%202.0-607D8B?style=flat-square)
-![Release](https://img.shields.io/badge/Release-v2.1.0-5C6BC0?style=flat-square)
+![Release](https://img.shields.io/badge/Release-v2.2.0-5C6BC0?style=flat-square)
 ![AGP](https://img.shields.io/badge/AGP-8.7%20%7C%209.2-26A69A?style=flat-square)
 ![Gradle](https://img.shields.io/badge/Gradle-8.13%20%7C%209.6-78909C?style=flat-square)
 ![JDK](https://img.shields.io/badge/JDK-17%2B-8B7EC8?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-24%2F24_passing-26A69A?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-34%2F34_passing-26A69A?style=flat-square)
 [![Stars](https://img.shields.io/github/stars/Pangu-Immortal/StringFogPro?style=flat-square&color=5C6BC0)](https://github.com/Pangu-Immortal/StringFogPro/stargazers)
 
 **如果对你有帮助，点个 Star ⭐ 支持一下 · If it helps, a Star means a lot**
@@ -28,7 +28,7 @@
 
 ## TL;DR
 
-**StringFogPro** 是一款自动加密 APK / AAR 中 Java·Kotlin 字符串字面量的 **Gradle 字符串加密插件**：构建期把明文替换为「密文 + 运行时解密调用」，反编译只看到乱码，让硬编码的接口地址、密钥、Token 不再裸奔。它在经典 [StringFog](https://github.com/MegatronKing/StringFog)（Apache-2.0）基础上做**现代化超集升级**——拥抱 **AGP 8.7 / 9.2** 现代插桩 API（`AsmClassVisitorFactory` + `onVariants`），**内置 AES**（原版 v3.0.0 已删除），提供 **XOR / AES / 自定义算法**三选一，新增 **每串随机密钥**、**bytes 免 Base64 模式**、**明文→密文映射文件**，支持**按包 include/exclude + 最小串长阈值**配置。运行时是**零依赖纯 Java JAR**，一次 `./gradlew assembleRelease` 全自动完成、零侵入业务代码。**24/24 测试通过 + 真实 APK/AAR 反编译证据 + AGP 8.7/9.2 双档实测。** 适用于 Android APK/AAR/库的字符串混淆、密钥保护、反逆向加固。
+**StringFogPro** 是一款自动加密 APK / AAR 中 Java·Kotlin 字符串字面量的 **Gradle 字符串加密插件**：构建期把明文替换为「密文 + 运行时解密调用」，反编译只看到乱码，让硬编码的接口地址、密钥、Token 不再裸奔。它在经典 [StringFog](https://github.com/MegatronKing/StringFog)（Apache-2.0）基础上做**现代化超集升级**——拥抱 **AGP 8.7 / 9.2** 现代插桩 API（`AsmClassVisitorFactory` + `onVariants`），**内置 AES**（原版 v3.0.0 已删除），提供 **XOR / AES / 自定义算法**三选一，新增 **每串随机密钥**、**bytes 免 Base64 模式**、**明文→密文映射文件**，支持**按包 include/exclude + 最小串长阈值**配置。运行时是**零依赖纯 Java JAR**，一次 `./gradlew assembleRelease` 全自动完成、零侵入业务代码。**34/34 测试通过 + 真实 APK/AAR 反编译证据 + AGP 8.7/9.2 双档实测。** 适用于 Android APK/AAR/库的字符串混淆、密钥保护、反逆向加固。
 
 ## 目录
 
@@ -51,6 +51,7 @@
 | 特性 | 说明 |
 | --- | --- |
 | **Java / Kotlin 双支持** | 工作在 ASM 字节码层，与源语言无关，两者被同样加密（附真实反编译证据） |
+| **拼接字面量加密（v2.2.0）** | 支持 `invokedynamic makeConcatWithConstants`（Java 9+/Kotlin 的 `"文本"+变量`/字符串模板）——去糖为等价 `StringBuilder` 链，加密 recipe/bootstrap 常量里的明文（旧版仅 LDC 够不着） |
 | **APK + AAR/JAR 加密** | Application 变体与 Library 变体走同一套 ASM 变换核心 |
 | **三种算法** | 内置 **XOR+Base64（默认）** 与 **AES-128/CBC**，可注册任意自定义 `IStringFog` |
 | **每串随机密钥** | 每个字符串独立随机密钥，相同明文各处密文不同，抗统计/模式分析 |
@@ -95,7 +96,7 @@ buildscript {
         google(); mavenCentral()
     }
     dependencies {
-        classpath("com.github.Pangu-Immortal.StringFogPro:stringfog-gradle-plugin:v2.1.0")
+        classpath("com.github.Pangu-Immortal.StringFogPro:stringfog-gradle-plugin:v2.2.0")
     }
 }
 ```
@@ -112,7 +113,7 @@ buildscript {
 >     }
 > }
 > ```
-> 之后即可 `plugins { id("com.va.stringfog") version "v2.1.0" }`（已实测该 module 坐标可解析装载）。
+> 之后即可 `plugins { id("com.va.stringfog") version "v2.2.0" }`（已实测该 module 坐标可解析装载）。
 
 ### 第 3 步：应用插件 + 引入运行时 + 配置
 
@@ -126,7 +127,7 @@ plugins {
 
 dependencies {
     // 运行时解密器（零依赖纯 Java JAR）
-    implementation("com.github.Pangu-Immortal.StringFogPro:stringfog:v2.1.0")
+    implementation("com.github.Pangu-Immortal.StringFogPro:stringfog:v2.2.0")
 }
 
 // 可选配置；不写则零配置走默认 XOR（向后兼容 v1.1.0）
@@ -168,7 +169,7 @@ stringfog {
 
 ## 相对原版 StringFog 的升级
 
-| 维度 | 原版 StringFog（5.x） | StringFogPro v2.1.0 | 实现 |
+| 维度 | 原版 StringFog（5.x） | StringFogPro v2.2.0 | 实现 |
 | --- | --- | --- | :---: |
 | AGP 基线 | AGP 8.x / Gradle 8 | **AGP 8.7 与 9.2 双档实测** | ✅ |
 | AES 算法 | v3.0.0 起**已删除** | **内置回归**（AES-128/CBC/PKCS5，随机 IV） | ✅ |
@@ -321,7 +322,7 @@ StringFogPro/
 - **运行时为何是 Java 而非 Kotlin？** 运行时 JAR 会被打进每个消费方 APK，目标是**零依赖极小**。用 Kotlin 会强制引入 `kotlin-stdlib`（约 1.5MB+），破坏零依赖定位。加密在 ASM 字节码层，Kotlin 业务类同样被加密。
 - **密钥并非密码学机密。** 密钥（含每串随机密钥）随字节码嵌入 APK。目标是**抵御 `strings`/grep 明文扫描、抬高逆向成本**，而非提供不可破解的加密。
 - **编译期常量（`const val` / `static final String`）不被加密。** 它们以 `ConstantValue` 属性内联，非方法体 `LDC` 指令；敏感串请用方法返回值或非 const 字段。
-- **非常量拼接不误伤。** 仅改 `LDC` String 常量；Java 9+ 的 `invokedynamic makeConcatWithConstants` 常量在 BSM 引导参数中、非 LDC，不触碰。
+- **拼接字面量加密（v2.2.0 起）。** 除 `LDC` String 常量外，Java 9+/Kotlin 的 `invokedynamic makeConcatWithConstants`（`"文本"+变量`、字符串模板）也被处理：去糖为等价 `StringBuilder` 链，把 recipe 字面量片段与 `` bootstrap 常量里 ≥`minLength` 的明文改为运行期 `decrypt`，动态参数按精确类型 `append`，拼接结果逐字节不变。无可加密字面量的拼接（纯变量 / `makeConcat`）原样保留、零改动。此模式下插件对被插桩类请求 `COMPUTE_FRAMES` 重算帧。
 - **超长串跳过。** 超阈值（Base64 45000 / bytes 8000 UTF-8 字节）保持明文，避免常量池 65535 上限，远超真实密钥/URL 长度。
 - **作用域 `PROJECT`。** 仅加密本模块源码，不加密依赖（避免二次加密 / 加密 AndroidX）。
 
@@ -335,6 +336,12 @@ StringFogPro/
 > v2.1.0 已补齐的原 Roadmap 项：每串随机密钥、bytes 免 Base64、mapping 映射文件、AAR 库端到端反编译证据——均附实现位与测试/反编译证据。
 
 ## 更新日志
+
+### v2.2.0（invokedynamic 拼接加密）
+- **新增 `makeConcatWithConstants` 加密**：Java 9+/Kotlin 的 `"文本"+变量`/字符串模板编译为 `invokedynamic`，其字面量藏在 recipe 与 bootstrap 常量里（旧版 LDC 路径够不着）。本版把该 `invokedynamic` 去糖为等价 `StringBuilder` 链，加密达门槛字面量、动态参数按精确类型 `append`，**拼接结果逐字节等价**。
+- **树 API 重构**：核心访问器改用 `MethodNode`，依方法真实 `maxLocals` 安全分配新局部（去糖需按逆序暂存栈上参数）；LDC 加密与拼接块加密共用单一加密序列构造器。
+- **帧模式**：被插桩类请求 `COMPUTE_FRAMES_FOR_INSTRUMENTED_CLASSES`（去糖改变指令数并新增局部，帧/maxs 须重算）。
+- **测试**：34/34 通过（旧 24 + 新 10 invokedynamic）；新增用例覆盖字面量+变量、多段长短混合、全基本类型参数、`` 常量折叠、bytes/AES/每串密钥、纯变量/`makeConcat` 不去糖、真实 `javac` 产物、含分支(StackMapTable)方法 `COMPUTE_FRAMES` 去糖——均以「对真实 `StringConcatFactory` 参考结果逐字节往返一致 + 明文消失」断言。
 
 ### v2.1.0（生产级打磨）
 - **补齐能力**：每串随机密钥、bytes 免 Base64、明文→密文映射文件、AAR 库端到端反编译证据。
